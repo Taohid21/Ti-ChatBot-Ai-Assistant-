@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ti ChatBot - Chat Open Source</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs/prism.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/prismjs/themes/prism-okaidia.css" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      transition: background-color 0.3s, color 0.3s;
+    }
+    .light-theme {
+      background-color: #f3f4f6;
+      color: #1f2937;
+    }
+    .message {
+      opacity: 0;
+      transform: translateY(10px);
+      animation: slideIn 0.3s ease-out forwards;
+    }
+    @keyframes slideIn {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .typing::after {
+      content: '|';
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .loader {
+      border: 4px solid transparent;
+      border-top: 4px solid #f97316;
+      border-right: 4px solid #3b82f6;
+      border-bottom: 4px solid #10b981;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .sidebar {
+      transform: translateX(-100%);
+      transition: transform 0.3s ease-in-out;
+    }
+    .sidebar.open {
+      transform: translateX(0);
+    }
+    .code-block {
+      position: relative;
+      animation: fadeIn 0.5s ease-in;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    textarea {
+      resize: none;
+      overflow: hidden;
+    }
+    .login-bg {
+      background: linear-gradient(45deg, #1a1a1a, #2d3748, #4a5568);
+      animation: gradientShift 15s ease infinite;
+    }
+    @keyframes gradientShift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .typing-animation {
+      display: inline-block;
+      overflow: hidden;
+      white-space: pre-wrap;
+      animation: typing 2s steps(40, end);
+    }
+    @keyframes typing {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+    .success-animation {
+      animation: pulse 1s ease-in-out;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+  </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col h-screen overflow-hidden">
+
+  <!-- Login Page -->
+  <div id="loginPage" class="fixed inset-0 login-bg flex items-center justify-center z-50">
+    <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md">
+      <h2 class="text-3xl font-bold text-orange-500 mb-6 text-center">Welcome to Ti ChatBot</h2>
+      <div class="space-y-4">
+        <input id="username" class="w-full bg-gray-700 text-white px-4 py-3 rounded-lg text-sm" placeholder="Enter your name" />
+        <input id="profilePic" type="file" accept="image/*" class="w-full text-sm text-gray-400 file:bg-orange-500 file:text-white file:px-4 file:py-2 file:rounded-lg file:border-0" />
+        <button id="createAccountBtn" class="w-full bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-lg font-semibold">Create Account</button>
+        <button id="skipAccountBtn" class="w-full bg-gray-600 hover:bg-gray-500 text-white py-3 rounded-lg font-semibold">Skip Account</button>
+      </div>
+      <div id="loading" class="hidden flex justify-center mt-4">
+        <div class="loader"></div>
+      </div>
+      <div id="errorMessage" class="text-red-500 text-sm mt-4 hidden"></div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="px-4 py-3 flex justify-between items-center border-b border-gray-800 bg-gray-900 fixed top-0 left-0 right-0 z-10">
+    <div class="flex items-center space-x-3">
+      <button onclick="toggleSidebar()" class="text-orange-500 text-xl"><i class="fas fa-bars"></i></button>
+      <div class="text-xl font-bold text-orange-500">Ti ChatBot</div>
+    </div>
+    <div class="flex space-x-2">
+      <button onclick="toggleTheme()" class="bg-gray-800 hover:bg-gray-700 text-white text-xs px-3 py-1 rounded-lg"><i class="fas fa-moon"></i></button>
+      <button onclick="clearChatHistory()" class="bg-gray-800 hover:bg-gray-700 text-white text-xs px-3 py-1 rounded-lg"><i class="fas fa-trash"></i></button>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <div id="sidebar" class="sidebar fixed top-0 left-0 h-full w-64 bg-gray-800 p-4 z-20">
+    <div class="flex items-center space-x-3 mb-6">
+      <img id="sidebarProfilePic" class="w-12 h-12 rounded-full object-cover" src="" alt="Profile" />
+      <div id="sidebarUsername" class="text-lg font-semibold text-orange-500"></div>
+    </div>
+    <div class="flex justify-between mb-4">
+      <button onclick="logout()" class="bg-gray-700 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded-lg">Logout</button>
+      <button onclick="deleteAccount()" class="bg-red-600 hover:bg-red-700 text-white text-xs px-3 py-1 rounded-lg">Delete Account</button>
+    </div>
+    <input id="historySearch" class="w-full bg-gray-700 text-white px-4 py-2 rounded-lg text-sm mb-4" placeholder="Search chat history..." />
+    <h3 class="text-sm font-semibold text-gray-400 mb-2">Chat History <span id="unreadBadge" class="bg-orange-500 text-white text-xs px-2 py-1 rounded-full hidden"></span></h3>
+    <div id="chatHistory" class="space-y-2 overflow-y-auto max-h-[70vh]"></div>
+  </div>
+
+  <!-- Chat Area -->
+  <main id="chatbox" class="flex-1 px-4 pt-20 pb-32 space-y-4 overflow-y-auto scroll-smooth"></main>
+
+  <!-- Footer -->
+  <footer class="p-4 bg-gray-800 flex items-center gap-2 fixed bottom-0 left-0 right-0">
+    <textarea id="userInput" class="flex-grow bg-gray-700 text-white px-4 py-3 rounded-lg text-sm" placeholder="Ask anything..." rows="1"></textarea>
+    <button onclick="startVoiceInput()" class="bg-gray-700 hover:bg-gray-600 text-white p-3 rounded-lg"><i class="fas fa-microphone"></i></button>
+    <button onclick="sendMessage()" class="bg-orange-500 hover:bg-orange-600 text-white p-3 rounded-lg"><i class="fas fa-paper-plane"></i></button>
+  </footer>
+
+  <script>
+    const chatbox = document.getElementById('chatbox');
+    const userInput = document.getElementById('userInput');
+    const loginPage = document.getElementById('loginPage');
+    const sidebar = document.getElementById('sidebar');
+    const chatHistory = document.getElementById('chatHistory');
+    const errorMessage = document.getElementById('errorMessage');
+    const createAccountBtn = document.getElementById('createAccountBtn');
+    const skipAccountBtn = document.getElementById('skipAccountBtn');
+    const historySearch = document.getElementById('historySearch');
+    const unreadBadge = document.getElementById('unreadBadge');
+    const API_KEY = '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';
+    let currentSessionId = null;
+    let recognition = null;
+
+    // Auto-resize textarea
+    userInput.addEventListener('input', () => {
+      userInput.style.height = 'auto';
+      userInput.style.height = `${userInput.scrollHeight}px`;
+    });
+
+    function checkLogin() {
+      console.log('Checking login...');
+      try {
+        const user = JSON.parse(localStorage.getItem('user'));
+        if (user && user.username) {
+          console.log('User found:', user);
+          loginPage.classList.add('hidden');
+          document.getElementById('sidebarUsername').innerText = user.username;
+          document.getElementById('sidebarProfilePic').src = user.profilePic || 'https://via.placeholder.com/50';
+          loadChatHistory();
+          appendMessage(`Welcome back, ${user.username}!`, false);
+        } else {
+          console.log('No user found, showing login page');
+          loginPage.classList.remove('hidden');
+        }
+      } catch (err) {
+        console.error('Error checking login:', err);
+        localStorage.removeItem('user');
+        loginPage.classList.remove('hidden');
+      }
+    }
+
+    function handleLogin() {
+      console.log('handleLogin called');
+      const username = document.getElementById('username').value.trim();
+      const profilePic = document.getElementById('profilePic').files[0];
+      errorMessage.classList.add('hidden');
+      document.getElementById('loading').classList.remove('hidden');
+
+      if (!username || username.length < 3) {
+        console.log('Invalid username');
+        errorMessage.innerText = 'Username must be at least 3 characters long';
+        errorMessage.classList.remove('hidden');
+        document.getElementById('loading').classList.add('hidden');
+        return;
+      }
+
+      const user = { username, profilePic: 'https://via.placeholder.com/50' };
+
+      if (profilePic) {
+        console.log('Processing profile picture');
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          console.log('Profile picture read successfully');
+          user.profilePic = e.target.result;
+          saveUserAndProceed(user);
+        };
+        reader.onerror = function () {
+          console.error('Error reading profile picture');
+          user.profilePic = 'https://via.placeholder.com/50'; // Fallback to default
+          saveUserAndProceed(user); // Proceed without picture
+        };
+        reader.readAsDataURL(profilePic);
+      } else {
+        console.log('No profile picture, proceeding with default');
+        saveUserAndProceed(user);
+      }
+    }
+
+    function saveUserAndProceed(user) {
+      console.log('Saving user:', user);
+      try {
+        if (!window.localStorage) {
+          errorMessage.innerText = 'Local storage is disabled in your browser';
+          errorMessage.classList.remove('hidden');
+          document.getElementById('loading').classList.add('hidden');
+          return;
+        }
+        localStorage.setItem('user', JSON.stringify(user));
+        loginPage.classList.add('hidden');
+        document.getElementById('sidebarUsername').innerText = user.username;
+        document.getElementById('sidebarProfilePic').src = user.profilePic;
+        document.getElementById('loading').classList.add('hidden');
+        createAccountBtn.classList.add('success-animation');
+        setTimeout(() => createAccountBtn.classList.remove('success-animation'), 1000);
+        loadChatHistory();
+        appendMessage(`Welcome, ${user.username}! Let's start chatting.`, false);
+      } catch (err) {
+        console.error('Error saving user:', err);
+        errorMessage.innerText = 'Error saving user data: ' + err.message;
+        errorMessage.classList.remove('hidden');
+        document.getElementById('loading').classList.add('hidden');
+      }
+    }
+
+    function skipAccount() {
+      console.log('Skipping account creation');
+      const user = { username: 'Guest', profilePic: 'https://via.placeholder.com/50' };
+      saveUserAndProceed(user);
+    }
+
+    function logout() {
+      if (confirm('Are you sure you want to logout?')) {
+        localStorage.removeItem('user');
+        chatbox.innerHTML = '';
+        currentSessionId = null;
+        loginPage.classList.remove('hidden');
+        sidebar.classList.remove('open');
+      }
+    }
+
+    function deleteAccount() {
+      if (confirm('Are you sure you want to delete your account? This cannot be undone.')) {
+        document.getElementById('loading').classList.remove('hidden');
+        loginPage.classList.remove('hidden');
+        setTimeout(() => {
+          try {
+            localStorage.clear();
+            chatbox.innerHTML = '';
+            chatHistory.innerHTML = '';
+            currentSessionId = null;
+            document.getElementById('sidebarUsername').innerText = '';
+            document.getElementById('sidebarProfilePic').src = '';
+            document.getElementById('loading').classList.add('hidden');
+            sidebar.classList.remove('open');
+          } catch (err) {
+            errorMessage.innerText = 'Error deleting account: ' + err.message;
+            errorMessage.classList.remove('hidden');
+            document.getElementById('loading').classList.add('hidden');
+          }
+        }, 2000); // Delay for loading animation
+      }
+    }
+
+    createAccountBtn.addEventListener('click', handleLogin);
+    skipAccountBtn.addEventListener('click', skipAccount);
+
+    function toggleSidebar() {
+      sidebar.classList.toggle('open');
+      updateUnreadBadge();
+    }
+
+    function toggleTheme() {
+      document.body.classList.toggle('light-theme');
+      const icon = document.querySelector('.fa-moon, .fa-sun');
+      icon.classList.toggle('fa-sun');
+      icon.classList.toggle('fa-moon');
+    }
+
+    function clearChatHistory() {
+      if (confirm('Are you sure you want to clear all chat history?')) {
+        localStorage.removeItem('chats');
+        chatHistory.innerHTML = '';
+        chatbox.innerHTML = '';
+        currentSessionId = null;
+      }
+    }
+
+    function appendMessage(content, isUser = false, isCode = false, sessionId = currentSessionId, timestamp = new Date().toISOString()) {
+      const msg = document.createElement('div');
+      msg.className = `flex ${isUser ? 'justify-end' : 'justify-start'} message`;
+      msg.dataset.timestamp = timestamp;
+
+      const bubble = document.createElement('div');
+      bubble.className = `px-4 py-3 rounded-2xl max-w-[80%] text-sm leading-relaxed relative group ${
+        isUser ? 'bg-orange-500 text-white' : 'bg-gray-700 text-white'
+      }`;
+
+      const timeDisplay = document.createElement('div');
+      timeDisplay.className = 'text-xs text-gray-400 mt-1';
+      timeDisplay.innerText = new Date(timestamp).toLocaleTimeString();
+
+      if (isCode) {
+        bubble.innerHTML = `
+          <pre class="code-block bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto"><code class="language-javascript">${content}</code>
+            <button onclick="copyCode(this)" class="absolute top-2 right-2 bg-gray-700 text-xs px-2 py-1 rounded hover:bg-gray-600">Copy</button>
+          </pre>`;
+        Prism.highlightAllUnder(bubble);
+      } else {
+        const contentDiv = document.createElement('div');
+        contentDiv.className = isUser ? '' : 'typing-animation';
+        contentDiv.innerHTML = marked.parse(content);
+        bubble.appendChild(contentDiv);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'absolute top-0 right-0 hidden group-hover:flex space-x-2 text-xs bg-gray-800 p-1 rounded';
+      actions.innerHTML = `
+        <button onclick="editMessage(this)" class="text-gray-400 hover:text-white"><i class="fas fa-edit"></i></button>
+        <button onclick="deleteMessage(this)" class="text-gray-400 hover:text-white"><i class="fas fa-trash"></i></button>
+      `;
+
+      msg.appendChild(bubble);
+      bubble.appendChild(timeDisplay);
+      if (isUser) bubble.appendChild(actions);
+      chatbox.appendChild(msg);
+      chatbox.scrollTop = chatbox.scrollHeight;
+
+      saveChat(sessionId, content, isUser, timestamp);
+    }
+
+    function copyCode(btn) {
+      const code = btn.parentElement.querySelector('code').innerText;
+      navigator.clipboard.writeText(code);
+      btn.innerText = 'Copied!';
+      setTimeout(() => btn.innerText = 'Copy', 1500);
+    }
+
+    function editMessage(btn) {
+      const bubble = btn.closest('.px-4');
+      const content = bubble.querySelector('p')?.innerText || bubble.innerText.split('\n')[0];
+      userInput.value = content;
+      deleteMessage(btn, false);
+    }
+
+    function deleteMessage(btn, save = true) {
+      const msg = btn.closest('.message');
+      const timestamp = msg.dataset.timestamp;
+      msg.remove();
+      if (save) {
+        const chats = JSON.parse(localStorage.getItem('chats')) || {};
+        if (chats[currentSessionId]) {
+          chats[currentSessionId].messages = chats[currentSessionId].messages.filter(m => m.timestamp !== timestamp);
+          localStorage.setItem('chats', JSON.stringify(chats));
+        }
+      }
+    }
+
+    function saveChat(sessionId, content, isUser, timestamp) {
+      try {
+        let chats = JSON.parse(localStorage.getItem('chats')) || {};
+        if (!chats[sessionId]) {
+          chats[sessionId] = { messages: [], timestamp: new Date().toISOString(), read: true };
+        }
+        chats[sessionId].messages.push({ content, isUser, timestamp });
+        chats[sessionId].read = false;
+        localStorage.setItem('chats', JSON.stringify(chats));
+        loadChatHistory();
+      } catch (err) {
+        console.error('Error saving chat:', err);
+      }
+    }
+
+    function loadChatHistory() {
+      try {
+        const chats = JSON.parse(localStorage.getItem('chats')) || {};
+        const searchTerm = historySearch.value.toLowerCase();
+        chatHistory.innerHTML = '';
+        Object.keys(chats)
+          .sort((a, b) => new Date(chats[b].timestamp) - new Date(chats[a].timestamp))
+          .forEach((sessionId) => {
+            const chat = chats[sessionId];
+            const preview = chat.messages[0]?.content.slice(0, 50) + (chat.messages[0]?.content.length > 50 ? '...' : '');
+            if (!searchTerm || preview.toLowerCase().includes(searchTerm)) {
+              const historyItem = document.createElement('div');
+              historyItem.className = 'p-3 bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-600';
+              historyItem.innerHTML = `
+                <div class="text-sm font-semibold">${new Date(chat.timestamp).toLocaleString()}</div>
+                <div class="text-xs text-gray-400">${preview || 'No messages'}</div>
+              `;
+              historyItem.onclick = () => {
+                loadChatSession(sessionId);
+                chats[sessionId].read = true;
+                localStorage.setItem('chats', JSON.stringify(chats));
+                updateUnreadBadge();
+              };
+              chatHistory.appendChild(historyItem);
+            }
+          });
+        updateUnreadBadge();
+      } catch (err) {
+        console.error('Error loading chat history:', err);
+      }
+    }
+
+    function updateUnreadBadge() {
+      try {
+        const chats = JSON.parse(localStorage.getItem('chats')) || {};
+        const unreadCount = Object.values(chats).filter(chat => !chat.read).length;
+        if (unreadCount > 0) {
+          unreadBadge.innerText = unreadCount;
+          unreadBadge.classList.remove('hidden');
+        } else {
+          unreadBadge.classList.add('hidden');
+        }
+      } catch (err) {
+        console.error('Error updating unread badge:', err);
+      }
+    }
+
+    function loadChatSession(sessionId) {
+      currentSessionId = sessionId;
+      chatbox.innerHTML = '';
+      try {
+        const chats = JSON.parse(localStorage.getItem('chats')) || {};
+        const session = chats[sessionId];
+        if (session) {
+          session.messages.forEach((msg) => {
+            const isCode = msg.content.includes('```');
+            const codeOnly = isCode ? msg.content.replace(/```(?:\w+)?\n?([\s\S]*?)```/, '$1') : msg.content;
+            appendMessage(codeOnly, msg.isUser, isCode, sessionId, msg.timestamp);
+          });
+        }
+      } catch (err) {
+        console.error('Error loading chat session:', err);
+      }
+      toggleSidebar();
+    }
+
+    async function sendMessage() {
+      const input = userInput.value.trim();
+      if (!input) return;
+
+      if (!currentSessionId) {
+        currentSessionId = Date.now().toString();
+      }
+
+      appendMessage(input, true);
+      userInput.value = '';
+      userInput.style.height = 'auto';
+
+      const loadingMsg = document.createElement('div');
+      loadingMsg.className = 'flex justify-start message';
+      loadingMsg.innerHTML = `<div class="inline-block px-4 py-3 rounded-2xl bg-gray-700 text-white typing">Typing...</div>`;
+      chatbox.appendChild(loadingMsg);
+      chatbox.scrollTop = chatbox.scrollHeight;
+
+      try {
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'openai/gpt-3.5-turbo',
+            messages: [{ role: 'user', content: input }],
+          }),
+        });
+
+        const data = await response.json();
+        loadingMsg.remove();
+
+        const reply = data?.choices?.[0]?.message?.content;
+        if (!reply) {
+          appendMessage('No response from API.', false);
+        } else {
+          const isCode = reply.includes('```');
+          const codeOnly = isCode ? reply.replace(/```(?:\w+)?\n?([\s\S]*?)```/, '$1') : reply;
+          appendMessage(codeOnly, false, isCode);
+        }
+      } catch (err) {
+        loadingMsg.remove();
+        appendMessage('Error: Check your API key or connection.', false);
+      }
+    }
+
+    function startVoiceInput() {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert('Your browser does not support voice input.');
+        return;
+      }
+
+      recognition = new webkitSpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        document.querySelector('.fa-microphone').classList.add('text-orange-500');
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        userInput.value = transcript;
+        sendMessage();
+      };
+
+      recognition.onend = () => {
+        document.querySelector('.fa-microphone').classList.remove('text-orange-500');
+        recognition = null;
+      };
+
+      recognition.start();
+    }
+
+    historySearch.addEventListener('input', loadChatHistory);
+
+    userInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    window.onload = checkLogin;
+  </script>
+</body>
+</html>
